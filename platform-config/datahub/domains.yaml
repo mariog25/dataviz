@@ -1,0 +1,4 @@
+domains:
+  - id: commerce
+    name: Commerce
+    description: Commerce analytics domain
