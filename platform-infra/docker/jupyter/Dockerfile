@@ -1,5 +1,4 @@
-FROM jupyter/pyspark-notebook:spark-3.5.1
-
+FROM quay.io/jupyter/pyspark-notebook:spark-3.5.0
 COPY configs/jupyter/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 

@@ -8,7 +8,7 @@ Local Docker Compose runtime for a Databricks-like OSS lakehouse MVP:
 - **Trino 457** SQL/JDBC endpoint
 - **DataHub 0.13.3** (GMS + frontend + deps)
 - **JupyterLab** for notebook exploration
-
+   
 > Hardware target: Windows 11 + Docker Desktop (WSL2), 32 GB RAM.
 > Compose memory limits are tuned for a ~20 GB total cap and low idle usage.
 
@@ -23,6 +23,7 @@ cd platform-infra
 cp .env.example .env
 docker compose up -d --build
 ```
+=======
 Run deterministic bootstrap steps:
 ```bash
 ./init-scripts/01_minio_create_buckets.sh
