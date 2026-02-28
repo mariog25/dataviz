@@ -51,7 +51,7 @@ services:
     mem_limit: 1g
 
   polaris:
-    image: ghcr.io/apache/polaris:1.0.1
+    image: apache/polaris:1.0.0-incubating
     depends_on:
       - polaris-db
     environment:

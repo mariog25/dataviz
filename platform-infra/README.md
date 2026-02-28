@@ -3,7 +3,8 @@
 Local Docker Compose runtime for a Databricks-like OSS lakehouse MVP:
 - **Apache Spark 3.5.1** for ETL
 - **Apache Iceberg 1.6.1** tables in **MinIO**
-- **Apache Polaris 1.0.1** as REST catalog
+
+- **Apache Polaris 1.0.0-incubating** as REST catalog
 - **Trino 457** SQL/JDBC endpoint
 - **DataHub 0.13.3** (GMS + frontend + deps)
 - **JupyterLab** for notebook exploration
@@ -29,7 +30,46 @@ Run deterministic bootstrap steps:
 docker compose exec spark spark-submit /opt/data-workloads/spark_jobs/write_demo_table.py
 ./init-scripts/03_smoke_test.sh
 ```
+## Paso a paso (ejecución end-to-end)
+1. Clona el repositorio y entra a `platform-infra`.
+2. Crea tu archivo de variables:
+   ```bash
+   cp .env.example .env
+   ```
+3. Levanta la plataforma:
+   ```bash
+   docker compose up -d --build
+   ```
+4. Crea buckets en MinIO:
+   ```bash
+   ./init-scripts/01_minio_create_buckets.sh
+   ```
+5. Bootstrap de Polaris (desde tu host usa `localhost`; dentro de contenedores se usa `polaris`):
+   ```bash
+   POLARIS_URI=http://localhost:8181 ./init-scripts/02_bootstrap_polaris.sh
+   ```
+6. Carga tabla demo con Spark:
+   ```bash
+   docker compose exec spark spark-submit /opt/data-workloads/spark_jobs/write_demo_table.py
+   ```
+7. Ejecuta smoke test:
+   ```bash
+   ./init-scripts/03_smoke_test.sh
+   ```
+8. Prueba en Trino CLI:
+   ```bash
+   docker compose exec trino trino --server http://localhost:8080 --execute "SHOW SCHEMAS FROM iceberg"
+   docker compose exec trino trino --server http://localhost:8080 --execute "SHOW TABLES FROM iceberg.demo"
+   docker compose exec trino trino --server http://localhost:8080 --execute "SELECT * FROM iceberg.demo.sample_orders"
+   ```
 
+### Verificación visual de servicios
+- MinIO Console: `http://localhost:9001`
+- Trino UI/API: `http://localhost:8080`
+- JupyterLab: `http://localhost:8888`
+- DataHub Frontend: `http://localhost:9002`
+
+=======
 ## Endpoints
 - MinIO API: http://localhost:9000
 - MinIO Console: http://localhost:9001
