@@ -1,6 +1,7 @@
 # platform-infra
 
 Local Docker Compose runtime for a Databricks-like OSS lakehouse MVP:
+=======
 - **Apache Spark 3.5.1** for ETL
 - **Apache Iceberg 1.6.1** tables in **MinIO**
 - **Apache Polaris 1.0.0-incubating** as REST catalog
@@ -15,14 +16,13 @@ Local Docker Compose runtime for a Databricks-like OSS lakehouse MVP:
 - Docker Desktop 4.x+ with Compose v2
 - At least 20 GB Docker memory available
 - Outbound access to `public.ecr.aws` (Spark base image is pulled from Amazon Public ECR to avoid Docker Hub tag issues)
-
+=======
 ## Quick start
 ```bash
 cd platform-infra
 cp .env.example .env
 docker compose up -d --build
 ```
-
 Run deterministic bootstrap steps:
 ```bash
 ./init-scripts/01_minio_create_buckets.sh
@@ -30,7 +30,7 @@ Run deterministic bootstrap steps:
 docker compose exec spark spark-submit /opt/data-workloads/spark_jobs/write_demo_table.py
 ./init-scripts/03_smoke_test.sh
 ```
-
+=======
 ## Paso a paso (ejecución end-to-end)
 1. Clona el repositorio y entra a `platform-infra`.
 2. Crea tu archivo de variables:
@@ -69,7 +69,7 @@ docker compose exec spark spark-submit /opt/data-workloads/spark_jobs/write_demo
 - Trino UI/API: `http://localhost:8080`
 - JupyterLab: `http://localhost:8888`
 - DataHub Frontend: `http://localhost:9002`
-
+=======
 ## Endpoints
 - MinIO API: http://localhost:9000
 - MinIO Console: http://localhost:9001
