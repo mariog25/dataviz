@@ -3,6 +3,7 @@
 Local Docker Compose runtime for a Databricks-like OSS lakehouse MVP:
 - **Apache Spark 3.5.1** for ETL
 - **Apache Iceberg 1.6.1** tables in **MinIO**
+
 - **Apache Polaris 1.0.0-incubating** as REST catalog
 - **Trino 457** SQL/JDBC endpoint
 - **DataHub 0.13.3** (GMS + frontend + deps)
@@ -29,7 +30,6 @@ Run deterministic bootstrap steps:
 docker compose exec spark spark-submit /opt/data-workloads/spark_jobs/write_demo_table.py
 ./init-scripts/03_smoke_test.sh
 ```
-
 ## Paso a paso (ejecución end-to-end)
 1. Clona el repositorio y entra a `platform-infra`.
 2. Crea tu archivo de variables:
@@ -69,6 +69,7 @@ docker compose exec spark spark-submit /opt/data-workloads/spark_jobs/write_demo
 - JupyterLab: `http://localhost:8888`
 - DataHub Frontend: `http://localhost:9002`
 
+=======
 ## Endpoints
 - MinIO API: http://localhost:9000
 - MinIO Console: http://localhost:9001
