@@ -1,5 +1,4 @@
 FROM public.ecr.aws/bitnami/spark:3.5.1
-
 USER root
 RUN install_packages curl && \
     mkdir -p /opt/bitnami/spark/jars-extra && \
