@@ -19,7 +19,6 @@ Validate from Trino:
 ```bash
 docker compose exec trino trino --server http://localhost:8080 --execute "SELECT * FROM iceberg.demo.sample_orders"
 ```
-=======
 ## Local tests
 ```bash
 python -m pytest tests -q
