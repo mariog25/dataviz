@@ -1,0 +1,4 @@
+glossaryTerms:
+  - id: order_amount
+    name: Order Amount
+    definition: Monetary value of one order
