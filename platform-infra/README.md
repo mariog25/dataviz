@@ -6,8 +6,8 @@ Local Docker Compose runtime for a Databricks-like OSS lakehouse MVP:
 - **Apache Polaris 1.0.0-incubating** as REST catalog
 - **Trino 457** SQL/JDBC endpoint
 - **DataHub 0.13.3** (GMS + frontend + deps)
-- **JupyterLab** (`quay.io/jupyter/pyspark-notebook:spark-3.5.0`) for notebook exploration
-
+- **JupyterLab** for notebook exploration
+   
 > Hardware target: Windows 11 + Docker Desktop (WSL2), 32 GB RAM.
 > Compose memory limits are tuned for a ~20 GB total cap and low idle usage.
 
@@ -15,22 +15,19 @@ Local Docker Compose runtime for a Databricks-like OSS lakehouse MVP:
 - Docker Desktop 4.x+ with Compose v2
 - At least 20 GB Docker memory available
 - Outbound access to `public.ecr.aws` (Spark base image is pulled from Amazon Public ECR to avoid Docker Hub tag issues)
-
 ## Quick start
 ```bash
 cd platform-infra
 cp .env.example .env
 docker compose up -d --build
 ```
-
 Run deterministic bootstrap steps:
 ```bash
-bash ./init-scripts/01_minio_create_buckets.sh
-bash ./init-scripts/02_bootstrap_polaris.sh
+./init-scripts/01_minio_create_buckets.sh
+./init-scripts/02_bootstrap_polaris.sh
 docker compose exec spark spark-submit /opt/data-workloads/spark_jobs/write_demo_table.py
-bash ./init-scripts/03_smoke_test.sh
+./init-scripts/03_smoke_test.sh
 ```
-
 ## Paso a paso (ejecución end-to-end)
 1. Clona el repositorio y entra a `platform-infra`.
 2. Crea tu archivo de variables:
@@ -43,11 +40,11 @@ bash ./init-scripts/03_smoke_test.sh
    ```
 4. Crea buckets en MinIO:
    ```bash
-   bash ./init-scripts/01_minio_create_buckets.sh
+   ./init-scripts/01_minio_create_buckets.sh
    ```
 5. Bootstrap de Polaris (desde tu host usa `localhost`; dentro de contenedores se usa `polaris`):
    ```bash
-   POLARIS_URI=http://localhost:8181 bash ./init-scripts/02_bootstrap_polaris.sh
+   POLARIS_URI=http://localhost:8181 ./init-scripts/02_bootstrap_polaris.sh
    ```
 6. Carga tabla demo con Spark:
    ```bash
@@ -55,7 +52,7 @@ bash ./init-scripts/03_smoke_test.sh
    ```
 7. Ejecuta smoke test:
    ```bash
-   bash ./init-scripts/03_smoke_test.sh
+   ./init-scripts/03_smoke_test.sh
    ```
 8. Prueba en Trino CLI:
    ```bash
@@ -69,7 +66,6 @@ bash ./init-scripts/03_smoke_test.sh
 - Trino UI/API: `http://localhost:8080`
 - JupyterLab: `http://localhost:8888`
 - DataHub Frontend: `http://localhost:9002`
-
 ## Endpoints
 - MinIO API: http://localhost:9000
 - MinIO Console: http://localhost:9001

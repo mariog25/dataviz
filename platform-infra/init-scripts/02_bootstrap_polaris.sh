@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-[ -n "${BASH_VERSION:-}" ] || exec bash "$0" "$@"
 set -euo pipefail
 
 POLARIS_URI=${POLARIS_URI:-http://localhost:8181}
