@@ -213,13 +213,105 @@ services:
       - lakehouse
     mem_limit: 2g
 
-  datahub-gms:
-    image: acryldata/datahub-gms:v0.13.3
+  datahub-mysql-setup:
+    image: acryldata/datahub-mysql-setup:v0.13.2
+    depends_on:
+      datahub-mysql:
+        condition: service_started
+    environment:
+      DATAHUB_DB_NAME: datahub
+      MYSQL_HOST: datahub-mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USERNAME: datahub
+      MYSQL_PASSWORD: datahub
+      MYSQL_ROOT_PASSWORD: datahub
+    networks:
+      - lakehouse
+
+  datahub-elasticsearch-setup:
+    image: acryldata/datahub-elasticsearch-setup:v0.13.2
+    depends_on:
+      datahub-elasticsearch:
+        condition: service_started
+    command: ["/bin/sh", "-c", "/create-indices.sh"]
+    environment:
+      ELASTICSEARCH_HOST: datahub-elasticsearch
+      ELASTICSEARCH_PORT: "9200"
+      ELASTICSEARCH_PROTOCOL: http
+      ELASTICSEARCH_USE_SSL: "false"
+    networks:
+      - lakehouse
+
+  datahub-system-update:
+    image: acryldata/datahub-upgrade:v0.13.2
+    depends_on:
+      datahub-mysql:
+        condition: service_started
+      datahub-mysql-setup:
+        condition: service_started
+      datahub-elasticsearch:
+        condition: service_started
+      datahub-elasticsearch-setup:
+        condition: service_started
+      datahub-kafka:
+        condition: service_started
+    command: ["-u", "SystemUpdate"]
+    environment:
+      SCHEMA_REGISTRY_TYPE: INTERNAL
+      SCHEMA_REGISTRY_SYSTEM_UPDATE: "true"
+      KAFKA_BOOTSTRAP_SERVER: datahub-kafka:9092
+      KAFKA_SCHEMAREGISTRY_URL: http://datahub-gms:8080/schema-registry/api/
+      EBEAN_DATASOURCE_HOST: datahub-mysql:3306
+      EBEAN_DATASOURCE_URL: jdbc:mysql://datahub-mysql:3306/datahub
+      EBEAN_DATASOURCE_USERNAME: datahub
+      EBEAN_DATASOURCE_PASSWORD: datahub
+      ELASTICSEARCH_HOST: datahub-elasticsearch
+      ELASTICSEARCH_PORT: "9200"
+      ELASTICSEARCH_PROTOCOL: http
+      ELASTICSEARCH_USE_SSL: "false"
+      ENTITY_REGISTRY_CONFIG_PATH: /datahub/datahub-gms/resources/entity-registry.yml
+      GRAPH_SERVICE_IMPL: elasticsearch
+      DATAHUB_SECRET: ${DATAHUB_SECRET}
+      DATAHUB_PRECREATE_TOPICS: "true"
+      DATAHUB_SQL_SETUP_ENABLED: "true"
+    networks:
+      - lakehouse
+
+  datahub-upgrade:
+    image: acryldata/datahub-upgrade:v0.13.2
     depends_on:
       - datahub-kafka
       - datahub-mysql
       - datahub-elasticsearch
     environment:
+      SCHEMA_REGISTRY_TYPE: INTERNAL
+      GRAPH_SERVICE_IMPL: "elasticsearch"
+      SKIP_NEO4J_CHECK: "true"
+      ENTITY_REGISTRY_CONFIG_PATH: /datahub/datahub-gms/resources/entity-registry.yml
+      EBEAN_DATASOURCE_USERNAME: datahub
+      EBEAN_DATASOURCE_PASSWORD: datahub
+      EBEAN_DATASOURCE_HOST: datahub-mysql:3306
+      EBEAN_DATASOURCE_URL: jdbc:mysql://datahub-mysql:3306/datahub
+      KAFKA_BOOTSTRAP_SERVER: datahub-kafka:9092
+      DATAHUB_SECRET: ${DATAHUB_SECRET}
+      ELASTICSEARCH_HOST: datahub-elasticsearch
+      ELASTICSEARCH_PORT: 9200
+    networks:
+      - lakehouse
+    restart: "no"
+
+  datahub-gms:
+    image: acryldata/datahub-gms:v0.13.2
+    depends_on:
+      datahub-system-update:
+        condition: service_completed_successfully
+    environment:
+      KAFKA_SCHEMAREGISTRY_TYPE: INTERNAL
+      SCHEMA_REGISTRY_URL: "http://localhost:8080/schema-registry"
+      KAFKA_SCHEMAREGISTRY_URL: "http://localhost:8080/schema-registry"
+      GRAPH_SERVICE_IMPL: "elasticsearch"
+      SKIP_NEO4J_CHECK: "true"
+      ENTITY_REGISTRY_CONFIG_PATH: /datahub/datahub-gms/resources/entity-registry.yml
       EBEAN_DATASOURCE_USERNAME: datahub
       EBEAN_DATASOURCE_PASSWORD: datahub
       EBEAN_DATASOURCE_HOST: datahub-mysql:3306
@@ -236,7 +328,7 @@ services:
     mem_limit: 3g
 
   datahub-frontend:
-    image: acryldata/datahub-frontend-react:v0.13.3
+    image: acryldata/datahub-frontend-react:v0.13.2
     depends_on:
       - datahub-gms
     environment:
