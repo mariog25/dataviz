@@ -15,7 +15,7 @@ def build_spark() -> SparkSession:
         .config("spark.sql.catalog.lakehouse.type", "rest")
         .config("spark.sql.catalog.lakehouse.uri", polaris_uri)
         .config("spark.sql.catalog.lakehouse.warehouse", warehouse)
-        .config("spark.sql.defaultCatalog", "lakehouse")
+        .config("spark.sql.defaultCatalog", "local_lakehouse")
         .config("spark.hadoop.fs.s3a.endpoint", "http://minio:9000")
         .config("spark.hadoop.fs.s3a.access.key", minio_user)
         .config("spark.hadoop.fs.s3a.secret.key", minio_pass)
