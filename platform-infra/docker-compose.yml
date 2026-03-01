@@ -189,8 +189,20 @@ services:
       - lakehouse
     mem_limit: 1g
 
+  datahub-elasticsearch-perms:
+    image: busybox:1.36
+    user: "0:0"
+    command: ["sh","-lc","chown -R 1000:0 /usr/share/elasticsearch/data && chmod -R 775 /usr/share/elasticsearch/data"]
+    volumes:
+      -  ~/lakehouse-state/datahub-es:/usr/share/elasticsearch/data
+    networks:
+      - lakehouse
+
   datahub-elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:7.17.24
+    depends_on:
+      - datahub-elasticsearch-perms
+    user: "1000:0"
     environment:
       discovery.type: single-node
       ES_JAVA_OPTS: -Xms1g -Xmx1g
@@ -213,6 +225,7 @@ services:
       EBEAN_DATASOURCE_HOST: datahub-mysql:3306
       EBEAN_DATASOURCE_URL: jdbc:mysql://datahub-mysql:3306/datahub
       KAFKA_BOOTSTRAP_SERVER: datahub-kafka:9092
+      DATAHUB_SECRET: ${DATAHUB_SECRET}
       ELASTICSEARCH_HOST: datahub-elasticsearch
       ELASTICSEARCH_PORT: 9200
       DATAHUB_GMS_HEAP_OPTS: "-Xms1g -Xmx2g"
@@ -227,6 +240,8 @@ services:
     depends_on:
       - datahub-gms
     environment:
+      DATAHUB_SECRET: ${DATAHUB_SECRET}
+      KAFKA_BOOTSTRAP_SERVER: ${KAFKA_BOOTSTRAP_SERVER}
       DATAHUB_GMS_HOST: datahub-gms
       DATAHUB_GMS_PORT: 8080
     ports:
