@@ -11,7 +11,7 @@ services:
       - "9000:9000"
       - "9001:9001"
     volumes:
-      - ../.data/minio:/data
+      -  ~/lakehouse-state/minio:/data
     networks:
       - lakehouse
     mem_limit: 1g
@@ -46,7 +46,7 @@ services:
       POSTGRES_USER: ${POLARIS_DB_USER}
       POSTGRES_PASSWORD: ${POLARIS_DB_PASSWORD}
     volumes:
-      - ../.data/polaris-db:/var/lib/postgresql/data
+      - ~/lakehouse-state/polaris-db:/var/lib/postgresql/data
     networks:
       - lakehouse
     mem_limit: 1g
@@ -184,7 +184,7 @@ services:
       MYSQL_ROOT_PASSWORD: datahubroot
     command: ["--default-authentication-plugin=mysql_native_password"]
     volumes:
-      - ../.data/datahub-mysql:/var/lib/mysql
+      - ~/lakehouse-state/datahub-mysql:/var/lib/mysql
     networks:
       - lakehouse
     mem_limit: 1g
@@ -196,7 +196,7 @@ services:
       ES_JAVA_OPTS: -Xms1g -Xmx1g
       xpack.security.enabled: "false"
     volumes:
-      - ../.data/datahub-es:/usr/share/elasticsearch/data
+      - ~/lakehouse-state/datahub-es:/usr/share/elasticsearch/data
     networks:
       - lakehouse
     mem_limit: 2g
