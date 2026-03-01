@@ -28,7 +28,7 @@ Run deterministic bootstrap steps:
 docker compose exec spark spark-submit /opt/data-workloads/spark_jobs/write_demo_table.py
 ./init-scripts/03_smoke_test.sh
 ```
-## Paso a paso (ejecución end-to-end)
+## Step by Step 
 1. Clona el repositorio y entra a `platform-infra`.
 2. Crea tu archivo de variables:
    ```bash
