@@ -11,7 +11,7 @@ services:
       - "9000:9000"
       - "9001:9001"
     volumes:
-      - minio_data:/data
+      -  ~/lakehouse-state/minio:/data
     networks:
       - lakehouse
     mem_limit: 1g
@@ -27,6 +27,7 @@ services:
       minio:
         condition: service_healthy
     environment:
+      POLARIS_TOKEN: ${POLARIS_TOKEN}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       MINIO_BUCKETS: ${MINIO_BUCKETS}
@@ -45,7 +46,7 @@ services:
       POSTGRES_USER: ${POLARIS_DB_USER}
       POSTGRES_PASSWORD: ${POLARIS_DB_PASSWORD}
     volumes:
-      - polaris_db_data:/var/lib/postgresql/data
+      - ~/lakehouse-state/polaris-db:/var/lib/postgresql/data
     networks:
       - lakehouse
     mem_limit: 1g
@@ -56,13 +57,25 @@ services:
       - polaris-db
     environment:
       POLARIS_BOOTSTRAP_CREDENTIALS: ${POLARIS_BOOTSTRAP_CREDENTIALS}
+      POLARIS_REALM_CONTEXT_REALMS: default-realm
+      POLARIS_REALM_CONTEXT_REQUIRE_HEADER: "false"
+      POLARIS_AUTHENTICATION_TOKEN_BROKER_MAX_TOKEN_GENERATION: "PT24H"
+      QUARKUS_SWAGGER_UI_ENABLE: true
+      QUARKUS_SWAGGER_UI_ALWAYS_INCLUDE: true
+      QUARKUS_SMALLRYE_OPENAPI_ENABLE: true
+      QUARKUS_LOG_LEVEL: INFO
+      QUARKUS_LOG_CATEGORY__ORG_APACHE_POLARIS__LEVEL: DEBUG
+      QUARKUS_LOG_CATEGORY__IO_QUARKUS_RESTEASY_REACTIVE__LEVEL: DEBUG
       QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://polaris-db:5432/${POLARIS_DB_NAME}
       QUARKUS_DATASOURCE_USERNAME: ${POLARIS_DB_USER}
       QUARKUS_DATASOURCE_PASSWORD: ${POLARIS_DB_PASSWORD}
+      AWS_REGION: us-east-1
+      AWS_DEFAULT_REGION: us-east-1
       QUARKUS_HTTP_PORT: 8181
-      JAVA_TOOL_OPTIONS: "-Xms512m -Xmx1536m"
+      JAVA_TOOL_OPTIONS: "-Daws.region=us-east-1 -Daws.defaultRegion=us-east-1 -Xms512m -Xmx1536m"
     ports:
       - "8181:8181"
+      - "8182:8182"
     networks:
       - lakehouse
     mem_limit: 2g
@@ -77,8 +90,7 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-      POLARIS_REST_URI: ${POLARIS_REST_URI}
-      POLARIS_CATALOG_NAME: ${POLARIS_CATALOG_NAME}
+      POLARIS_TOKEN: ${POLARIS_TOKEN}
       TRINO_JVM_CONFIG: "-Xmx2048M"
     volumes:
       - ./configs/trino/catalog:/etc/trino/catalog
@@ -105,8 +117,6 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       POLARIS_URI: ${POLARIS_URI}
-      POLARIS_REST_URI: ${POLARIS_REST_URI}
-      POLARIS_CATALOG_NAME: ${POLARIS_CATALOG_NAME}
       ICEBERG_WAREHOUSE: ${ICEBERG_WAREHOUSE}
     ports:
       - "7077:7077"
@@ -133,8 +143,6 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       POLARIS_URI: ${POLARIS_URI}
-      POLARIS_REST_URI: ${POLARIS_REST_URI}
-      POLARIS_CATALOG_NAME: ${POLARIS_CATALOG_NAME}
       ICEBERG_WAREHOUSE: ${ICEBERG_WAREHOUSE}
     volumes:
       - ./configs/jupyter/notebooks:/home/jovyan/work/notebooks
@@ -176,19 +184,31 @@ services:
       MYSQL_ROOT_PASSWORD: datahubroot
     command: ["--default-authentication-plugin=mysql_native_password"]
     volumes:
-      - datahub_mysql_data:/var/lib/mysql
+      - ~/lakehouse-state/datahub-mysql:/var/lib/mysql
     networks:
       - lakehouse
     mem_limit: 1g
 
+  datahub-elasticsearch-perms:
+    image: busybox:1.36
+    user: "0:0"
+    command: ["sh","-lc","chown -R 1000:0 /usr/share/elasticsearch/data && chmod -R 775 /usr/share/elasticsearch/data"]
+    volumes:
+      -  ~/lakehouse-state/datahub-es:/usr/share/elasticsearch/data
+    networks:
+      - lakehouse
+
   datahub-elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:7.17.24
+    depends_on:
+      - datahub-elasticsearch-perms
+    user: "1000:0"
     environment:
       discovery.type: single-node
       ES_JAVA_OPTS: -Xms1g -Xmx1g
       xpack.security.enabled: "false"
     volumes:
-      - datahub_es_data:/usr/share/elasticsearch/data
+      - ~/lakehouse-state/datahub-es:/usr/share/elasticsearch/data
     networks:
       - lakehouse
     mem_limit: 2g
@@ -205,6 +225,7 @@ services:
       EBEAN_DATASOURCE_HOST: datahub-mysql:3306
       EBEAN_DATASOURCE_URL: jdbc:mysql://datahub-mysql:3306/datahub
       KAFKA_BOOTSTRAP_SERVER: datahub-kafka:9092
+      DATAHUB_SECRET: ${DATAHUB_SECRET}
       ELASTICSEARCH_HOST: datahub-elasticsearch
       ELASTICSEARCH_PORT: 9200
       DATAHUB_GMS_HEAP_OPTS: "-Xms1g -Xmx2g"
@@ -219,6 +240,8 @@ services:
     depends_on:
       - datahub-gms
     environment:
+      DATAHUB_SECRET: ${DATAHUB_SECRET}
+      KAFKA_BOOTSTRAP_SERVER: ${KAFKA_BOOTSTRAP_SERVER}
       DATAHUB_GMS_HOST: datahub-gms
       DATAHUB_GMS_PORT: 8080
     ports:
@@ -242,9 +265,3 @@ services:
 networks:
   lakehouse:
     name: lakehouse
-
-volumes:
-  minio_data:
-  polaris_db_data:
-  datahub_mysql_data:
-  datahub_es_data:
