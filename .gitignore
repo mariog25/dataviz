@@ -1,2 +1,3 @@
 .data/**/*
 platform-infra/docker-compose.bck
+platform-infra/configs/jupyter/notebooks/.ipynb_checkpoints/test-checkpoint.ipynb
