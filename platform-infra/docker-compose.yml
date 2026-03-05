@@ -346,17 +346,77 @@ services:
       - lakehouse
     mem_limit: 1g
 
-  airflow:
-    image: apache/airflow:2.10.3-python3.11
-    profiles: ["airflow"]
+  airflow-db:
+    image: postgres:16
     environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - ~/lakehouse-state/airflow_data/bbdd:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [lakehouse]
+
+  airflow-webserver:
+    image: apache/airflow:2.10.3-python3.11
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    profiles: ["airflow"]
+    environment: &airflow_env
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__FERNET_KEY: "MTbdVog_rwIXZHWZOhCOHAoDiBPudYZ2nSqq0UK1isk="
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+      AIRFLOW__WEBSERVER__SECRET_KEY: "local_webserver_secret_key"
+      AIRFLOW__CORE__PARALLELISM: "8"
+      AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: "4"
+      AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG: "1"
+    command: standalone
     ports:
       - "8081:8080"
+    volumes:
+      - ./configs/airflow/dags:/opt/airflow/dags
+      - ~/lakehouse-state/airflow_data/logs:/opt/airflow/logs
+      - ~/lakehouse-state/airflow_data/plugins:/opt/airflow/plugins
     networks:
       - lakehouse
     mem_limit: 2g
+
+  airflow-scheduler:
+    image: apache/airflow:2.10.3-python3.11
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    environment: *airflow_env
+    volumes:
+      - ./configs/airflow/dags:/opt/airflow/dags
+      - ~/lakehouse-state/airflow_data/logs:/opt/airflow/logs
+      - ~/lakehouse-state/airflow_data/plugins:/opt/airflow/plugins
+    command: scheduler
+    mem_limit: 2g
+    networks: [lakehouse]
+
+  airflow-init:
+    image: apache/airflow:2.10.3-python3.11
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+    environment: *airflow_env
+    command: >
+      bash -lc "
+      airflow db migrate &&
+      airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@example.com --password admin"
+    networks: [lakehouse]
 
 networks:
   lakehouse:
