@@ -1,0 +1,21 @@
+FROM jupyter/pyspark-notebook:python-3.11
+
+USER root
+
+RUN apt-get update && apt-get install -y \
+    poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir requests boto3 pandas
+RUN mkdir -p /home/jovyan/.jupyter
+RUN python3 - <<EOF
+from jupyter_server.auth import passwd
+p = passwd("jupyter")
+with open("/home/jovyan/.jupyter/jupyter_server_config.py","w") as f:
+    f.write(f"c.ServerApp.password = u'{p}'\n")
+    f.write("c.ServerApp.ip = '0.0.0.0'\n")
+    f.write("c.ServerApp.open_browser = False\n")
+EOF
+
+RUN chown -R ${NB_UID}:${NB_GID} /home/jovyan/.jupyter
+
+USER ${NB_UID}

@@ -1,0 +1,21 @@
+FROM apache/airflow:2.10.3-python3.11
+
+USER root
+RUN apt-get update && apt-get install -y \
+    poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+USER airflow
+RUN pip install --no-cache-dir --upgrade \
+    google-api-python-client \
+    google-auth-httplib2 \
+    google-auth-oauthlib \
+    boto3 \
+    pyspark \
+    requests \
+    pandas \
+    botocore \
+    pyarrow \
+    psycopg2-binary
+
+USER airflow

@@ -136,7 +136,7 @@ services:
   jupyterlab:
     build:
       context: .
-      dockerfile: docker/jupyter/Dockerfile
+      dockerfile: dockerfile.jupyterlab
     depends_on:
       - spark
       - minio
@@ -155,6 +155,89 @@ services:
       - lakehouse
     mem_limit: 1g
 
+  airflow-db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - ~/lakehouse-state/airflow_data/bbdd:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [lakehouse]
+
+  airflow-webserver:
+    build:
+      context: .
+      dockerfile: dockerfile.airflow
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    profiles: ["airflow"]
+    env_file: ./configs/airflow/.env
+    environment: &airflow_env
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__FERNET_KEY: "MTbdVog_rwIXZHWZOhCOHAoDiBPudYZ2nSqq0UK1isk="
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+      AIRFLOW__WEBSERVER__SECRET_KEY: "local_webserver_secret_key"
+      AIRFLOW__CORE__PARALLELISM: "8"
+      AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: "4"
+      AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG: "1"
+      AIRFLOW__LOGGING__BASE_LOG_FOLDER: /opt/airflow/logs
+      AIRFLOW__LOGGING__REMOTE_LOGGING: "false"
+      AIRFLOW__LOGGING__WORKER_LOG_SERVER_PORT: "8793"
+      AIRFLOW__LOGGING__WORKER_LOG_SERVER_HOST: airflow-scheduler
+    command: webserver
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./configs/airflow/dags:/opt/airflow/dags
+      - ~/lakehouse-state/airflow_data/logs:/opt/airflow/logs
+      - ~/lakehouse-state/airflow_data/plugins:/opt/airflow/plugins
+    networks:
+      - lakehouse
+    mem_limit: 2g
+
+  airflow-scheduler:
+    build:
+      context: .
+      dockerfile: dockerfile.airflow
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    env_file: ./configs/airflow/.env
+    environment: *airflow_env
+    volumes:
+      - ./configs/airflow/dags:/opt/airflow/dags
+      - ~/lakehouse-state/airflow_data/logs:/opt/airflow/logs
+      - ~/lakehouse-state/airflow_data/plugins:/opt/airflow/plugins
+    command: scheduler
+    mem_limit: 2g
+    networks: [lakehouse]
+
+  airflow-init:
+    image: apache/airflow:2.10.3-python3.11
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+    env_file: ./configs/airflow/.env
+    environment: *airflow_env
+    command: >
+      bash -lc "
+      airflow db migrate &&
+      airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@example.com --password admin"
+    networks: [lakehouse]
+
   datahub-zookeeper:
     image: confluentinc/cp-zookeeper:7.5.3
     environment:
@@ -162,6 +245,8 @@ services:
     networks:
       - lakehouse
     mem_limit: 512m
+
+ 
 
   datahub-kafka:
     image: confluentinc/cp-kafka:7.5.3
@@ -198,7 +283,7 @@ services:
     user: "0:0"
     command: ["sh","-lc","chown -R 1000:0 /usr/share/elasticsearch/data && chmod -R 775 /usr/share/elasticsearch/data"]
     volumes:
-      -  ~/lakehouse-state/datahub-es:/usr/share/elasticsearch/data
+      - ~/lakehouse-state/datahub-es:/usr/share/elasticsearch/data
     networks:
       - lakehouse
 
@@ -216,9 +301,15 @@ services:
     networks:
       - lakehouse
     mem_limit: 2g
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
 
   datahub-mysql-setup:
-    image: acryldata/datahub-mysql-setup:v0.13.2
+    image: acryldata/datahub-mysql-setup:v1.3.0.1
     depends_on:
       datahub-mysql:
         condition: service_started
@@ -228,16 +319,16 @@ services:
       MYSQL_PORT: "3306"
       MYSQL_USERNAME: datahub
       MYSQL_PASSWORD: datahub
-      MYSQL_ROOT_PASSWORD: datahub
+      MYSQL_ROOT_PASSWORD: datahubroot
     networks:
       - lakehouse
 
   datahub-elasticsearch-setup:
-    image: acryldata/datahub-elasticsearch-setup:v0.13.2
+    image: acryldata/datahub-elasticsearch-setup:v1.3.0.1
     depends_on:
       datahub-elasticsearch:
-        condition: service_started
-    command: ["/bin/sh", "-c", "/create-indices.sh"]
+        condition: service_healthy
+    command: ["/bin/sh", "-c", "sleep 20 && /create-indices.sh"]
     environment:
       ELASTICSEARCH_HOST: datahub-elasticsearch
       ELASTICSEARCH_PORT: "9200"
@@ -247,16 +338,16 @@ services:
       - lakehouse
 
   datahub-system-update:
-    image: acryldata/datahub-upgrade:v0.13.2
+    image: acryldata/datahub-upgrade:v1.3.0.1
     depends_on:
       datahub-mysql:
         condition: service_started
       datahub-mysql-setup:
-        condition: service_started
+        condition: service_completed_successfully
       datahub-elasticsearch:
-        condition: service_started
+        condition: service_healthy
       datahub-elasticsearch-setup:
-        condition: service_started
+        condition: service_completed_successfully
       datahub-kafka:
         condition: service_started
     command: ["-u", "SystemUpdate"]
@@ -281,38 +372,15 @@ services:
     networks:
       - lakehouse
 
-  datahub-upgrade:
-    image: acryldata/datahub-upgrade:v0.13.2
-    depends_on:
-      - datahub-kafka
-      - datahub-mysql
-      - datahub-elasticsearch
-    environment:
-      SCHEMA_REGISTRY_TYPE: INTERNAL
-      GRAPH_SERVICE_IMPL: "elasticsearch"
-      SKIP_NEO4J_CHECK: "true"
-      ENTITY_REGISTRY_CONFIG_PATH: /datahub/datahub-gms/resources/entity-registry.yml
-      EBEAN_DATASOURCE_USERNAME: datahub
-      EBEAN_DATASOURCE_PASSWORD: datahub
-      EBEAN_DATASOURCE_HOST: datahub-mysql:3306
-      EBEAN_DATASOURCE_URL: jdbc:mysql://datahub-mysql:3306/datahub
-      KAFKA_BOOTSTRAP_SERVER: datahub-kafka:9092
-      DATAHUB_SECRET: ${DATAHUB_SECRET}
-      ELASTICSEARCH_HOST: datahub-elasticsearch
-      ELASTICSEARCH_PORT: 9200
-    networks:
-      - lakehouse
-    restart: "no"
-
   datahub-gms:
-    image: acryldata/datahub-gms:v0.13.2
+    image: acryldata/datahub-gms:v1.3.0.1
     depends_on:
       datahub-system-update:
         condition: service_completed_successfully
     environment:
       KAFKA_SCHEMAREGISTRY_TYPE: INTERNAL
-      SCHEMA_REGISTRY_URL: "http://localhost:8080/schema-registry"
-      KAFKA_SCHEMAREGISTRY_URL: "http://localhost:8080/schema-registry"
+      SCHEMA_REGISTRY_URL: "http://datahub-gms:8080/schema-registry/api/"
+      KAFKA_SCHEMAREGISTRY_URL: "http://datahub-gms:8080/schema-registry/api/"
       GRAPH_SERVICE_IMPL: "elasticsearch"
       SKIP_NEO4J_CHECK: "true"
       ENTITY_REGISTRY_CONFIG_PATH: /datahub/datahub-gms/resources/entity-registry.yml
@@ -325,6 +393,10 @@ services:
       ELASTICSEARCH_HOST: datahub-elasticsearch
       ELASTICSEARCH_PORT: 9200
       DATAHUB_GMS_HEAP_OPTS: "-Xms1g -Xmx2g"
+      METADATA_SERVICE_AUTH_ENABLED: "true"
+      DATAHUB_SYSTEM_CLIENT_SECRET: ${DATAHUB_SECRET}
+      DATAHUB_TOKEN_SERVICE_SIGNING_KEY: ${DATAHUB_TOKEN_SIGNING_KEY}
+      DATAHUB_TOKEN_SERVICE_SALT: ${DATAHUB_TOKEN_SALT}
     ports:
       - "8084:8080"
     networks:
@@ -332,91 +404,21 @@ services:
     mem_limit: 3g
 
   datahub-frontend:
-    image: acryldata/datahub-frontend-react:v0.13.2
+    image: acryldata/datahub-frontend-react:v1.3.0.1
     depends_on:
       - datahub-gms
     environment:
       DATAHUB_SECRET: ${DATAHUB_SECRET}
-      KAFKA_BOOTSTRAP_SERVER: ${KAFKA_BOOTSTRAP_SERVER}
+      KAFKA_BOOTSTRAP_SERVER: datahub-kafka:9092
       DATAHUB_GMS_HOST: datahub-gms
       DATAHUB_GMS_PORT: 8080
+      METADATA_SERVICE_AUTH_ENABLED: "true"
+      DATAHUB_SYSTEM_CLIENT_SECRET: ${DATAHUB_SECRET}
     ports:
       - "9002:9002"
     networks:
       - lakehouse
     mem_limit: 1g
-
-  airflow-db:
-    image: postgres:16
-    environment:
-      POSTGRES_USER: airflow
-      POSTGRES_PASSWORD: airflow
-      POSTGRES_DB: airflow
-    volumes:
-      - ~/lakehouse-state/airflow_data/bbdd:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U airflow"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    networks: [lakehouse]
-
-  airflow-webserver:
-    image: apache/airflow:2.10.3-python3.11
-    depends_on:
-      airflow-db:
-        condition: service_healthy
-      airflow-init:
-        condition: service_completed_successfully
-    profiles: ["airflow"]
-    environment: &airflow_env
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
-      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-      AIRFLOW__CORE__FERNET_KEY: "MTbdVog_rwIXZHWZOhCOHAoDiBPudYZ2nSqq0UK1isk="
-      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
-      AIRFLOW__WEBSERVER__SECRET_KEY: "local_webserver_secret_key"
-      AIRFLOW__CORE__PARALLELISM: "8"
-      AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: "4"
-      AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG: "1"
-    command: standalone
-    ports:
-      - "8081:8080"
-    volumes:
-      - ./configs/airflow/dags:/opt/airflow/dags
-      - ~/lakehouse-state/airflow_data/logs:/opt/airflow/logs
-      - ~/lakehouse-state/airflow_data/plugins:/opt/airflow/plugins
-    networks:
-      - lakehouse
-    mem_limit: 2g
-
-  airflow-scheduler:
-    image: apache/airflow:2.10.3-python3.11
-    depends_on:
-      airflow-db:
-        condition: service_healthy
-      airflow-init:
-        condition: service_completed_successfully
-    environment: *airflow_env
-    volumes:
-      - ./configs/airflow/dags:/opt/airflow/dags
-      - ~/lakehouse-state/airflow_data/logs:/opt/airflow/logs
-      - ~/lakehouse-state/airflow_data/plugins:/opt/airflow/plugins
-    command: scheduler
-    mem_limit: 2g
-    networks: [lakehouse]
-
-  airflow-init:
-    image: apache/airflow:2.10.3-python3.11
-    depends_on:
-      airflow-db:
-        condition: service_healthy
-    environment: *airflow_env
-    command: >
-      bash -lc "
-      airflow db migrate &&
-      airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@example.com --password admin"
-    networks: [lakehouse]
 
 networks:
   lakehouse:
