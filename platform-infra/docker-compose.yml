@@ -49,13 +49,11 @@ services:
     environment:
       # Nessie server
       QUARKUS_HTTP_PORT: "19120"
-
       NESSIE_VERSION_STORE_TYPE: JDBC
       NESSIE_VERSION_STORE_PERSIST_JDBC_DATASOURCE: postgresql
       QUARKUS_DATASOURCE_POSTGRESQL_JDBC_URL: jdbc:postgresql://nessie-db:5432/nessie
       QUARKUS_DATASOURCE_POSTGRESQL_USERNAME: nessie
       QUARKUS_DATASOURCE_POSTGRESQL_PASSWORD: nessie
-
       NESSIE_SERVER_AUTHENTICATION_ENABLED: false
       NESSIE_CATALOG_DEFAULT_WAREHOUSE: warehouse
       NESSIE_CATALOG_WAREHOUSES_WAREHOUSE_LOCATION: s3://lakehouse/warehouse/
@@ -64,12 +62,10 @@ services:
       NESSIE_CATALOG_SERVICE_S3_DEFAULT_OPTIONS_EXTERNAL_ENDPOINT: http://minio:9000
       NESSIE_CATALOG_SERVICE_S3_DEFAULT_OPTIONS_PATH_STYLE_ACCESS: "true"
       NESSIE_CATALOG_SERVICE_S3_DEFAULT_OPTIONS_REGION: us-east-1
-
       NESSIE_CATALOG_SERVICE_S3_DEFAULT_OPTIONS_AUTH_TYPE: STATIC
       NESSIE_CATALOG_SERVICE_S3_DEFAULT_OPTIONS_ACCESS_KEY: "urn:nessie-secret:quarkus:mysecretsdefault"
       MYSECRETSDEFAULT_NAME: "${MINIO_ROOT_USER}"
       MYSECRETSDEFAULT_SECRET: "${MINIO_ROOT_PASSWORD}"
-
     networks:
       - lakehouse
     mem_limit: 1g
@@ -104,7 +100,7 @@ services:
       - lakehouse
     mem_limit: 3g
 
-  spark:
+  spark-master:
     build:
       context: .
       dockerfile: docker/spark/Dockerfile
@@ -114,7 +110,7 @@ services:
     environment:
       SPARK_MODE: master
       SPARK_NO_DAEMONIZE: "true"
-      SPARK_MASTER_HOST: spark
+      SPARK_MASTER_HOST: spark-master
       SPARK_MASTER_PORT: 7077
       SPARK_RPC_AUTHENTICATION_ENABLED: "no"
       SPARK_RPC_ENCRYPTION_ENABLED: "no"
@@ -125,20 +121,46 @@ services:
       ICEBERG_WAREHOUSE: ${ICEBERG_WAREHOUSE}
     ports:
       - "7077:7077"
-      - "4040:4040"
+      - "8082:8080"
     volumes:
       - ./configs/spark/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
       - ../data-workloads:/opt/data-workloads
     networks:
       - lakehouse
-    mem_limit: 6g
+    mem_limit: 2g
+
+  spark-worker:
+    build:
+      context: .
+      dockerfile: docker/spark/Dockerfile
+    depends_on:
+      - spark-master
+    environment:
+      SPARK_MODE: worker
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_WORKER_MEMORY: 2G
+      SPARK_WORKER_CORES: 2
+      SPARK_NO_DAEMONIZE: "true"
+      SPARK_RPC_AUTHENTICATION_ENABLED: "no"
+      SPARK_RPC_ENCRYPTION_ENABLED: "no"
+      SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: "no"
+      SPARK_SSL_ENABLED: "no"
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      ICEBERG_WAREHOUSE: ${ICEBERG_WAREHOUSE}
+    volumes:
+      - ./configs/spark/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
+      - ../data-workloads:/opt/data-workloads
+    networks:
+      - lakehouse
+    mem_limit: 3g
 
   jupyterlab:
     build:
       context: .
       dockerfile: dockerfile.jupyterlab
     depends_on:
-      - spark
+      - spark-master
       - minio
       - nessie
     ports:
@@ -195,6 +217,17 @@ services:
       AIRFLOW__LOGGING__REMOTE_LOGGING: "false"
       AIRFLOW__LOGGING__WORKER_LOG_SERVER_PORT: "8793"
       AIRFLOW__LOGGING__WORKER_LOG_SERVER_HOST: airflow-scheduler
+      AIRFLOW__DATAHUB__SERVERAIRFLOW__DATAHUB__ENABLED: "true"
+      AIRFLOW__DATAHUB__DATAHUB_CONN_ID: "datahub_rest_default"
+      AIRFLOW__DATAHUB__ENABLE_EXTRACTORS: "true"
+      AIRFLOW__DATAHUB__PATCH_SQL_PARSER: "true"
+      AIRFLOW__DATAHUB__ENABLE_DATA_PROCESS_INSTANCE: "true"
+      AIRFLOW__DATAHUB__TOKEN: "${DATAHUB_PAT}"
+      AIRFLOW__DATAHUB__ENABLED: "true"
+      AIRFLOW__DATAHUB__CLUSTER: "dev"
+      AIRFLOW__DATAHUB__LOG_LEVEL: "DEBUG"
+      AIRFLOW__DATAHUB__DEBUG_EMITTER: "true"
+      SPARK_MASTER_URL: spark://spark-master:7077
     command: webserver
     ports:
       - "8081:8080"
@@ -235,7 +268,9 @@ services:
     command: >
       bash -lc "
       airflow db migrate &&
-      airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@example.com --password admin"
+      airflow connections delete datahub_rest_default || true &&
+      airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@example.com --password admin || true
+      "
     networks: [lakehouse]
 
   datahub-zookeeper:
@@ -245,8 +280,6 @@ services:
     networks:
       - lakehouse
     mem_limit: 512m
-
- 
 
   datahub-kafka:
     image: confluentinc/cp-kafka:7.5.3
@@ -296,6 +329,8 @@ services:
       discovery.type: single-node
       ES_JAVA_OPTS: -Xms1g -Xmx1g
       xpack.security.enabled: "false"
+    ports:
+      - "9200:9200"
     volumes:
       - ~/lakehouse-state/datahub-es:/usr/share/elasticsearch/data
     networks:
@@ -397,6 +432,12 @@ services:
       DATAHUB_SYSTEM_CLIENT_SECRET: ${DATAHUB_SECRET}
       DATAHUB_TOKEN_SERVICE_SIGNING_KEY: ${DATAHUB_TOKEN_SIGNING_KEY}
       DATAHUB_TOKEN_SERVICE_SALT: ${DATAHUB_TOKEN_SALT}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8080/config >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
     ports:
       - "8084:8080"
     networks:
@@ -419,6 +460,114 @@ services:
     networks:
       - lakehouse
     mem_limit: 1g
+
+  datahub-load-indices:
+    image: acryldata/datahub-upgrade:v1.3.0.1
+    depends_on:
+      datahub-mysql:
+        condition: service_started
+      datahub-elasticsearch:
+        condition: service_healthy
+      datahub-gms:
+        condition: service_healthy
+      datahub-kafka:
+        condition: service_started
+    #command: ["-u", "RestoreIndices"]
+    command: ["-u", "RestoreIndices"]
+    environment:
+      EBEAN_DATASOURCE_HOST: datahub-mysql:3306
+      EBEAN_DATASOURCE_URL: jdbc:mysql://datahub-mysql:3306/datahub
+      EBEAN_DATASOURCE_USERNAME: datahub
+      EBEAN_DATASOURCE_PASSWORD: datahub
+      ELASTICSEARCH_HOST: datahub-elasticsearch
+      KAFKA_BOOTSTRAP_SERVER: datahub-kafka:9092
+      KAFKA_SCHEMAREGISTRY_URL: http://datahub-gms:8080/schema-registry/api/
+      ELASTICSEARCH_PORT: "9200"
+      ELASTICSEARCH_PROTOCOL: http
+      ELASTICSEARCH_USE_SSL: "false"
+      ENTITY_REGISTRY_CONFIG_PATH: /datahub/datahub-gms/resources/entity-registry.yml
+      GRAPH_SERVICE_IMPL: elasticsearch
+      DATAHUB_SECRET: ${DATAHUB_SECRET}
+    networks:
+      - lakehouse
+    mem_limit: 1g
+
+  datahub-mae-consumer:
+    image: acryldata/datahub-mae-consumer:v1.3.0.1
+    depends_on:
+      datahub-gms:
+        condition: service_healthy
+      datahub-kafka:
+        condition: service_started
+      datahub-elasticsearch:
+        condition: service_healthy
+      datahub-mysql:
+        condition: service_started
+    hostname: datahub-mae-consumer
+    environment:
+      KAFKA_BOOTSTRAP_SERVER: datahub-kafka:9092
+      KAFKA_SCHEMAREGISTRY_URL: http://datahub-gms:8080/schema-registry/api/
+      DATAHUB_GMS_HOST: datahub-gms
+      DATAHUB_GMS_PORT: "8080"
+      EBEAN_DATASOURCE_HOST: datahub-mysql:3306
+      EBEAN_DATASOURCE_URL: jdbc:mysql://datahub-mysql:3306/datahub
+      EBEAN_DATASOURCE_USERNAME: datahub
+      EBEAN_DATASOURCE_PASSWORD: datahub
+      ELASTICSEARCH_HOST: datahub-elasticsearch
+      ELASTICSEARCH_PORT: "9200"
+      ELASTICSEARCH_PROTOCOL: http
+      ELASTICSEARCH_USE_SSL: "false"
+      ES_BULK_REFRESH_POLICY: WAIT_UNTIL
+      GRAPH_SERVICE_IMPL: elasticsearch
+      ENTITY_REGISTRY_CONFIG_PATH: /datahub/datahub-mae-consumer/resources/entity-registry.yml
+      MAE_CONSUMER_ENABLED: "true"
+      PE_CONSUMER_ENABLED: "false"
+      KAFKA_CONSUMER_HEALTH_CHECK_ENABLED: "true"
+      KAFKA_CONSUMER_STOP_ON_DESERIALIZATION_ERROR: "true"
+      DATAHUB_UPGRADE_HISTORY_KAFKA_CONSUMER_GROUP_ID: generic-duhe-consumer-job-client-mcl
+      DATAHUB_SECRET: ${DATAHUB_SECRET}
+      SKIP_ELASTICSEARCH_CHECK: "false"
+      SKIP_MIGRATIONS: "true"
+      SKIP_NEO4J_CHECK: "true"
+      METADATA_SERVICE_AUTH_ENABLED: "true"
+      DATAHUB_SYSTEM_CLIENT_SECRET: ${DATAHUB_SECRET}
+      DATAHUB_TOKEN_SERVICE_SIGNING_KEY: ${DATAHUB_TOKEN_SIGNING_KEY}
+      DATAHUB_TOKEN_SERVICE_SALT: ${DATAHUB_TOKEN_SALT}
+
+    volumes:
+      - ./configs/datahub/entity-registry.yml:/datahub/datahub-mae-consumer/resources/entity-registry.yml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail http://localhost:9091/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 4
+      start_period: 120s
+    networks:
+      - lakehouse
+    mem_limit: 2g
+
+
+  vault:
+    image: hashicorp/vault:1.16
+    container_name: vault
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_ADDR: "http://vault:8200"
+    command: vault server -config=/vault/config/vault-config.hcl
+    volumes:
+      - ./configs/vault/vault-config.hcl:/vault/config/vault-config.hcl:ro
+      - ${HOME}/lakehouse-state/vault/vault-data:/vault/data
+    healthcheck:
+      test: ["CMD-SHELL", "VAULT_ADDR=http://127.0.0.1:8200 vault status >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - lakehouse
 
 networks:
   lakehouse:

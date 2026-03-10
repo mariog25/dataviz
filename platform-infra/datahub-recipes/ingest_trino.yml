@@ -1,0 +1,22 @@
+source:
+  type: trino
+  config:
+    host_port: "trino:8080"
+    database: "iceberg"
+    username: "trino"
+    include_tables: true
+    include_views: true
+
+    schema_pattern:
+      allow:
+        - "silver"
+
+    include_tables: true
+    include_views: false
+	  
+
+sink:
+  type: datahub-rest
+  config:
+    server: "http://datahub-gms:8080"
+    token: "${DATAHUB_PAT}"
