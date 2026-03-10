@@ -1,6 +1,6 @@
 # 1) Stack Lakehouse/Gobierno de Datos local (Docker Compose)
 
-Guía técnica y operativa para levantar **desde cero** este repositorio en una máquina limpia.
+Guía técnica y operativa.
 
 > **Objetivo**: entorno local tipo lakehouse para desarrollo y pruebas con MinIO, Spark, Iceberg, catálogo REST (Polaris), Trino, DataHub, Jupyter y Airflow opcional.
 >
