@@ -1,0 +1,250 @@
+name: lakehouse-local
+
+services:
+  minio:
+    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - lakehouse
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-01-17T23-25-50Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKETS: ${MINIO_BUCKETS}
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD} &&
+       for b in $$(echo $${MINIO_BUCKETS} | tr ',' ' '); do mc mb -p local/$$b || true; done"
+    networks:
+      - lakehouse
+    profiles: ["init"]
+
+  polaris-db:
+    image: postgres:16.6-alpine
+    environment:
+      POSTGRES_DB: ${POLARIS_DB_NAME}
+      POSTGRES_USER: ${POLARIS_DB_USER}
+      POSTGRES_PASSWORD: ${POLARIS_DB_PASSWORD}
+    volumes:
+      - polaris_db_data:/var/lib/postgresql/data
+    networks:
+      - lakehouse
+    mem_limit: 1g
+
+  polaris:
+    image: apache/polaris:1.0.0-incubating
+    depends_on:
+      - polaris-db
+    environment:
+      POLARIS_BOOTSTRAP_CREDENTIALS: ${POLARIS_BOOTSTRAP_CREDENTIALS}
+      QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://polaris-db:5432/${POLARIS_DB_NAME}
+      QUARKUS_DATASOURCE_USERNAME: ${POLARIS_DB_USER}
+      QUARKUS_DATASOURCE_PASSWORD: ${POLARIS_DB_PASSWORD}
+      QUARKUS_HTTP_PORT: 8181
+      JAVA_TOOL_OPTIONS: "-Xms512m -Xmx1536m"
+    ports:
+      - "8181:8181"
+    networks:
+      - lakehouse
+    mem_limit: 2g
+
+  trino:
+    image: trinodb/trino:457
+    depends_on:
+      - polaris
+      - minio
+    ports:
+      - "8080:8080"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      POLARIS_REST_URI: ${POLARIS_REST_URI}
+      POLARIS_CATALOG_NAME: ${POLARIS_CATALOG_NAME}
+      TRINO_JVM_CONFIG: "-Xmx2048M"
+    volumes:
+      - ./configs/trino/catalog:/etc/trino/catalog
+    networks:
+      - lakehouse
+    mem_limit: 3g
+
+  spark:
+    build:
+      context: .
+      dockerfile: docker/spark/Dockerfile
+    depends_on:
+      - polaris
+      - minio
+    environment:
+      SPARK_MODE: master
+      SPARK_NO_DAEMONIZE: "true"
+      SPARK_MASTER_HOST: spark
+      SPARK_MASTER_PORT: 7077
+      SPARK_RPC_AUTHENTICATION_ENABLED: "no"
+      SPARK_RPC_ENCRYPTION_ENABLED: "no"
+      SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: "no"
+      SPARK_SSL_ENABLED: "no"
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      POLARIS_URI: ${POLARIS_URI}
+      POLARIS_REST_URI: ${POLARIS_REST_URI}
+      POLARIS_CATALOG_NAME: ${POLARIS_CATALOG_NAME}
+      ICEBERG_WAREHOUSE: ${ICEBERG_WAREHOUSE}
+    ports:
+      - "7077:7077"
+      - "4040:4040"
+    volumes:
+      - ./configs/spark/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
+      - ../data-workloads:/opt/data-workloads
+    networks:
+      - lakehouse
+    mem_limit: 6g
+
+  jupyterlab:
+    build:
+      context: .
+      dockerfile: docker/jupyter/Dockerfile
+    depends_on:
+      - spark
+      - minio
+      - polaris
+    ports:
+      - "8888:8888"
+    environment:
+      JUPYTER_TOKEN: ${JUPYTER_TOKEN}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      POLARIS_URI: ${POLARIS_URI}
+      POLARIS_REST_URI: ${POLARIS_REST_URI}
+      POLARIS_CATALOG_NAME: ${POLARIS_CATALOG_NAME}
+      ICEBERG_WAREHOUSE: ${ICEBERG_WAREHOUSE}
+    volumes:
+      - ./configs/jupyter/notebooks:/home/jovyan/work/notebooks
+      - ../data-workloads:/home/jovyan/work/data-workloads
+    networks:
+      - lakehouse
+    mem_limit: 1g
+
+  datahub-zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.3
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    networks:
+      - lakehouse
+    mem_limit: 512m
+
+  datahub-kafka:
+    image: confluentinc/cp-kafka:7.5.3
+    depends_on:
+      - datahub-zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: datahub-zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://datahub-kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+    networks:
+      - lakehouse
+    mem_limit: 1g
+
+  datahub-mysql:
+    image: mysql:8.2
+    environment:
+      MYSQL_DATABASE: datahub
+      MYSQL_USER: datahub
+      MYSQL_PASSWORD: datahub
+      MYSQL_ROOT_PASSWORD: datahubroot
+    command: ["--default-authentication-plugin=mysql_native_password"]
+    volumes:
+      - datahub_mysql_data:/var/lib/mysql
+    networks:
+      - lakehouse
+    mem_limit: 1g
+
+  datahub-elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.24
+    environment:
+      discovery.type: single-node
+      ES_JAVA_OPTS: -Xms1g -Xmx1g
+      xpack.security.enabled: "false"
+    volumes:
+      - datahub_es_data:/usr/share/elasticsearch/data
+    networks:
+      - lakehouse
+    mem_limit: 2g
+
+  datahub-gms:
+    image: acryldata/datahub-gms:v0.13.3
+    depends_on:
+      - datahub-kafka
+      - datahub-mysql
+      - datahub-elasticsearch
+    environment:
+      EBEAN_DATASOURCE_USERNAME: datahub
+      EBEAN_DATASOURCE_PASSWORD: datahub
+      EBEAN_DATASOURCE_HOST: datahub-mysql:3306
+      EBEAN_DATASOURCE_URL: jdbc:mysql://datahub-mysql:3306/datahub
+      KAFKA_BOOTSTRAP_SERVER: datahub-kafka:9092
+      ELASTICSEARCH_HOST: datahub-elasticsearch
+      ELASTICSEARCH_PORT: 9200
+      DATAHUB_GMS_HEAP_OPTS: "-Xms1g -Xmx2g"
+    ports:
+      - "8084:8080"
+    networks:
+      - lakehouse
+    mem_limit: 3g
+
+  datahub-frontend:
+    image: acryldata/datahub-frontend-react:v0.13.3
+    depends_on:
+      - datahub-gms
+    environment:
+      DATAHUB_GMS_HOST: datahub-gms
+      DATAHUB_GMS_PORT: 8080
+    ports:
+      - "9002:9002"
+    networks:
+      - lakehouse
+    mem_limit: 1g
+
+  airflow:
+    image: apache/airflow:2.10.3-python3.11
+    profiles: ["airflow"]
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    ports:
+      - "8081:8080"
+    networks:
+      - lakehouse
+    mem_limit: 2g
+
+networks:
+  lakehouse:
+    name: lakehouse
+
+volumes:
+  minio_data:
+  polaris_db_data:
+  datahub_mysql_data:
+  datahub_es_data:
