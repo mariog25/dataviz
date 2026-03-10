@@ -1,0 +1,19 @@
+source:
+  type: s3
+  config:
+    path_specs:
+      - include: "s3://landing/financial/bbva/manifests/*.json"
+
+    aws_config:
+      aws_access_key_id: "minioadmin"
+      aws_secret_access_key: "minioadmin123"
+      aws_region: "us-east-1"
+      aws_endpoint_url: "http://minio:9000"
+
+    env: "DEV"
+
+sink:
+  type: datahub-rest
+  config:
+    server: "http://datahub-gms:8080"
+    token: "${DATAHUB_PAT}"

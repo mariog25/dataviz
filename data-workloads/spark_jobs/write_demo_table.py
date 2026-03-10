@@ -5,9 +5,8 @@ from pyspark.sql import SparkSession
 def build_spark() -> SparkSession:
     minio_user = os.getenv("MINIO_ROOT_USER", "minioadmin")
     minio_pass = os.getenv("MINIO_ROOT_PASSWORD", "minioadmin123")
-    polaris_uri = os.getenv("POLARIS_REST_URI", "http://polaris:8181/api/catalog")
+    polaris_uri = os.getenv("POLARIS_URI", "http://polaris:8181/api/catalog")
     warehouse = os.getenv("ICEBERG_WAREHOUSE", "s3a://lakehouse/warehouse")
-    catalog_prefix = os.getenv("POLARIS_CATALOG_NAME", "lakehouse")
 
     return (
         SparkSession.builder.appName("write-demo-iceberg-table")
@@ -16,8 +15,7 @@ def build_spark() -> SparkSession:
         .config("spark.sql.catalog.lakehouse.type", "rest")
         .config("spark.sql.catalog.lakehouse.uri", polaris_uri)
         .config("spark.sql.catalog.lakehouse.warehouse", warehouse)
-        .config("spark.sql.catalog.lakehouse.prefix", catalog_prefix)
-        .config("spark.sql.defaultCatalog", "lakehouse")
+        .config("spark.sql.defaultCatalog", "local_lakehouse")
         .config("spark.hadoop.fs.s3a.endpoint", "http://minio:9000")
         .config("spark.hadoop.fs.s3a.access.key", minio_user)
         .config("spark.hadoop.fs.s3a.secret.key", minio_pass)
