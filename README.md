@@ -178,19 +178,19 @@ vault operator unseal <UNSEAL_KEY_3>
 ```
 **Validación**: `vault status` debe mostrar `Sealed false`.
 
-## 6.3 Autenticarse y guardar secreto BBVA
+## 6.3 Autenticarse y guardar secreto
 ```bash
 export VAULT_ADDR=http://localhost:8200
 export VAULT_TOKEN=<VAULT_TOKEN>
 
-vault kv put secret/pipelines/bbva \
+vault kv put secret/pipelines/finn \
   datahub_pat=<DATAHUB_PAT> \
   minio_access_key=<MINIO_ACCESS_KEY> \
   minio_secret_key=<MINIO_SECRET_KEY>
 ```
 **Validación**:
 ```bash
-vault kv get secret/pipelines/bbva
+vault kv get secret/pipelines/finn
 ```
 
 ---
@@ -338,7 +338,7 @@ docker compose exec spark spark-sql -e "SHOW NAMESPACES IN lakehouse"
 
 ## 11.1 Contenedores arriba
 ```bash
-docker compose ps
+docker compose ps -a
 ```
 **Validación**: estado `Up` para servicios principales.
 
