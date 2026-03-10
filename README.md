@@ -14,14 +14,14 @@ Guía técnica y operativa.
 |---|---|---|
 | MinIO | Object storage S3-compatible (landing/silver/gold) | Activo en Compose |
 | Spark | ETL / escritura Iceberg | Activo en Compose |
-| Iceberg | Formato de tablas | Activo vía Spark/Trino |
-| Polaris (REST Catalog) | Catálogo Iceberg | Activo en Compose |
+| Iceberg | Capa Lakehouse | Activo vía Spark/Trino |
+| Nessie | Catálogo rest | Activo en Compose |
 | Trino | SQL endpoint | Activo en Compose |
-| DataHub | Catálogo, metadata, lineage | Activo en Compose |
-| Airflow | Orquestación | Disponible (perfil opcional) |
+| DataHub | Catálogo-linkage, metadata, lineage, Gobierno del Dato | Activo en Compose |
+| Airflow | Orquestación ETLs - DAGs | Activo en Compose |
 | JupyterLab | Notebooks de desarrollo | Activo en Compose |
-| Vault | Secret management | **No incluido por defecto** (arranque separado) |
-| Nessie | Catálogo versionado alternativo | **No incluido por defecto** (plantilla) |
+| Vault | Secret management | Activo en Compose |
+
 
 Estructura lógica de datos recomendada en object storage:
 - `landing/`
