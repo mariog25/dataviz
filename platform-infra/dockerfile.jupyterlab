@@ -1,11 +1,18 @@
-FROM jupyter/pyspark-notebook:python-3.11
+FROM quay.io/jupyter/pyspark-notebook:x86_64-spark-3.5.1
+
+RUN pip install --no-cache-dir requests boto3 pandas
+RUN pip install google-api-python-client google-api-core google-api-core botocore 
+RUN pip install google-auth-httplib2 google-auth-oauthlib boto3 pyspark==3.5.1 qdrant-client
+RUN pip install requests pandas botocore pyarrow
+RUN pip install pdf2image pytesseract pillow pdfplumber pikepdf
 
 USER root
 
 RUN apt-get update && apt-get install -y \
     poppler-utils \
+    tesseract-ocr \
     && rm -rf /var/lib/apt/lists/*
-RUN pip install --no-cache-dir requests boto3 pandas
+
 RUN mkdir -p /home/jovyan/.jupyter
 RUN python3 - <<EOF
 from jupyter_server.auth import passwd

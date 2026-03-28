@@ -43,7 +43,6 @@ services:
     depends_on:
       - nessie-db
       - minio
-    container_name: nessie
     ports:
       - "19120:19120"
     environment:
@@ -72,7 +71,6 @@ services:
 
   nessie-db:
     image: postgres:16
-    container_name: nessie-db
     environment:
       POSTGRES_DB: nessie
       POSTGRES_USER: nessie
@@ -211,8 +209,11 @@ services:
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
       AIRFLOW__WEBSERVER__SECRET_KEY: "local_webserver_secret_key"
       AIRFLOW__CORE__PARALLELISM: "8"
+      AIRFLOW__CORE__TEST_CONNECTION: "Enabled"
       AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: "4"
       AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG: "1"
+      AIRFLOW__SCHEDULER__SCHEDULER_ZOMBIE_TASK_THRESHOLD: 3600
+      AIRFLOW__SCHEDULER__ZOMBIE_DETECTION_INTERVAL: 30
       AIRFLOW__LOGGING__BASE_LOG_FOLDER: /opt/airflow/logs
       AIRFLOW__LOGGING__REMOTE_LOGGING: "false"
       AIRFLOW__LOGGING__WORKER_LOG_SERVER_PORT: "8793"
@@ -228,6 +229,7 @@ services:
       AIRFLOW__DATAHUB__LOG_LEVEL: "DEBUG"
       AIRFLOW__DATAHUB__DEBUG_EMITTER: "true"
       SPARK_MASTER_URL: spark://spark-master:7077
+      _PIP_ADDITIONAL_REQUIREMENTS: apache-airflow-providers-trino
     command: webserver
     ports:
       - "8081:8080"
@@ -329,10 +331,12 @@ services:
       discovery.type: single-node
       ES_JAVA_OPTS: -Xms1g -Xmx1g
       xpack.security.enabled: "false"
+      path.repo: /usr/share/elasticsearch/snapshots
     ports:
       - "9200:9200"
     volumes:
       - ~/lakehouse-state/datahub-es:/usr/share/elasticsearch/data
+      - ~/lakehouse-state/datahub-es-snapshots:/usr/share/elasticsearch/snapshots
     networks:
       - lakehouse
     mem_limit: 2g
@@ -549,7 +553,6 @@ services:
 
   vault:
     image: hashicorp/vault:1.16
-    container_name: vault
     restart: unless-stopped
     cap_add:
       - IPC_LOCK
@@ -568,6 +571,52 @@ services:
       retries: 10
     networks:
       - lakehouse
+
+  ollama:
+    image: ollama/ollama:0.17.7
+    ports:
+      - "11434:11434"
+    environment:
+      OLLAMA_KEEP_ALIVE: "10m"
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    runtime: nvidia
+    volumes:
+      - ${HOME}/lakehouse-state/ollama:/root/.ollama
+    networks:
+      - lakehouse
+    mem_limit: 3g
+    restart: unless-stopped
+
+  ollama-init:
+    image: ollama/ollama:0.17.7
+    depends_on:
+      - ollama
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "
+      sleep 8 &&
+      ollama pull qwen2.5:3b-instruct &&
+      ollama pull embeddinggemma
+      "
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    networks:
+      - lakehouse
+    restart: "no"
+    profiles: ["init"]
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - ${HOME}/lakehouse-state/qdrant:/qdrant/storage
+    networks:
+      - lakehouse
+    mem_limit: 1g
+    restart: unless-stopped
 
 networks:
   lakehouse:
