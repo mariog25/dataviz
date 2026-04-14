@@ -117,3 +117,32 @@ platform-infra/configs/jupyter/notebooks/.Trash-0/info/Gmail-BBVA.ipynb.trashinf
 platform-infra/configs/jupyter/notebooks/.Trash-0/files/Untitled 1.ipynb
 platform-infra/configs/jupyter/notebooks/.Trash-0/files/Untitled.ipynb
 platform-infra/configs/jupyter/notebooks/.Trash-0/files/Untitled1.ipynb
+platform-infra/configs/dagster/app/notebook_outputs/bbva_gmail.ipynb
+platform-infra/configs/dagster/app/notebook_outputs/bbva_gold.ipynb
+platform-infra/configs/dagster/app/notebook_outputs/bbva_movements.ipynb
+platform-infra/configs/dagster/app/notebook_outputs/test.ipynb
+platform-infra/configs/jupyter/notebooks/Gmail-Refresh-key.ipynb
+platform-infra/configs/jupyter/notebooks/.Trash-0/files/Gmail-BBVA.ipynb
+platform-infra/configs/jupyter/notebooks/.Trash-0/files/process_hipoteca_original.ipynb
+platform-infra/configs/jupyter/notebooks/.Trash-0/files/test.ipynb
+platform-infra/configs/jupyter/notebooks/Hipoteca BBVA/process_hipoteca_new_format.ipynb
+platform-infra/configs/jupyter/notebooks/Movimientos BBVA/Gmail-BBVA.ipynb
+platform-infra/configs/jupyter/notebooks/Movimientos BBVA/process-movements.ipynb
+platform-infra/configs/jupyter/notebooks/utils/spark/spark_utils.py
+platform-infra/configs/notebooks/hello_etl.ipynb
+platform-infra/configs/notebooks/.Trash-0/files/bbva_pdf_pipeline.py
+platform-infra/configs/notebooks/BBVA/bbva_lib/__init__.py
+platform-infra/configs/notebooks/BBVA/bbva_lib/financials_personal_bbva.py
+platform-infra/configs/notebooks/BBVA/bbva_lib/process_pdf.py
+platform-infra/configs/notebooks/BBVA/bbva_lib/spark_utils.py
+platform-infra/configs/notebooks/BBVA/gold_bbva/gold_model_spark_bbva.ipynb
+platform-infra/configs/notebooks/BBVA/hipoteca_bbva/process_hipoteca_new_format.ipynb
+platform-infra/configs/notebooks/BBVA/movimientos_bbva/financials_personal_bbva.py
+platform-infra/configs/notebooks/BBVA/movimientos_bbva/Gmail-BBVA.ipynb
+platform-infra/configs/notebooks/BBVA/movimientos_bbva/process_movements.ipynb
+platform-infra/.env
+platform-infra/configs/airflow/dags/financials_personal_bbva.py
+platform-infra/configs/airflow/dags/mortgage_revision_dag.py
+platform-infra/configs/airflow/dags/process_mortgage_revision.py
+platform-infra/configs/airflow/dags/financials_personal_bbva.py
+platform-infra/configs/airflow/dags/__pycache__/bbva_pdf_pipeline.cpython-311.pyc
