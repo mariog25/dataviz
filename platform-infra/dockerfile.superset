@@ -1,0 +1,10 @@
+FROM apache/superset:6.0.0
+
+USER root
+
+ENV VIRTUAL_ENV=/app/.venv
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+RUN uv pip install --no-cache-dir trino
+
+USER superset

@@ -1,6 +1,28 @@
-FROM quay.io/jupyter/pyspark-notebook:spark-3.5.0
-COPY configs/jupyter/requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
+FROM quay.io/jupyter/pyspark-notebook:x86_64-spark-3.5.1
 
-ENV JUPYTER_ENABLE_LAB=yes
-CMD ["start-notebook.sh", "--NotebookApp.token=${JUPYTER_TOKEN}", "--NotebookApp.allow_origin='*'", "--NotebookApp.ip=0.0.0.0"]
+RUN pip install --no-cache-dir requests boto3 pandas
+RUN pip install google-api-python-client google-api-core google-api-core botocore 
+RUN pip install google-auth-httplib2 google-auth-oauthlib boto3 pyspark==3.5.1 qdrant-client
+RUN pip install requests pandas botocore pyarrow
+RUN pip install pdf2image pytesseract pillow pdfplumber pikepdf
+
+USER root
+
+RUN apt-get update && apt-get install -y \
+    poppler-utils \
+    tesseract-ocr \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /home/jovyan/.jupyter
+RUN python3 - <<EOF
+from jupyter_server.auth import passwd
+p = passwd("jupyter")
+with open("/home/jovyan/.jupyter/jupyter_server_config.py","w") as f:
+    f.write(f"c.ServerApp.password = u'{p}'\n")
+    f.write("c.ServerApp.ip = '0.0.0.0'\n")
+    f.write("c.ServerApp.open_browser = False\n")
+EOF
+
+RUN chown -R ${NB_UID}:${NB_GID} /home/jovyan/.jupyter
+
+USER ${NB_UID}

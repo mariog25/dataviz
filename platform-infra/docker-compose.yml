@@ -168,8 +168,10 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       ICEBERG_WAREHOUSE: ${ICEBERG_WAREHOUSE}
+      PYTHONPATH: /notebooks/BBVA:/opt/bitnami/spark/python:/opt/bitnami/spark/python/lib/py4j-0.10.9.7-src.zip
+      SPARK_DRIVER_HOST: jupyterlab
     volumes:
-      - ./configs/jupyter/notebooks:/home/jovyan/work/notebooks
+      - ./configs/notebooks:/notebooks
       - ../data-workloads:/home/jovyan/work/data-workloads
     networks:
       - lakehouse
@@ -261,7 +263,9 @@ services:
     networks: [lakehouse]
 
   airflow-init:
-    image: apache/airflow:2.10.3-python3.11
+    build:
+      context: .
+      dockerfile: dockerfile.airflow
     depends_on:
       airflow-db:
         condition: service_healthy
@@ -537,7 +541,6 @@ services:
       DATAHUB_SYSTEM_CLIENT_SECRET: ${DATAHUB_SECRET}
       DATAHUB_TOKEN_SERVICE_SIGNING_KEY: ${DATAHUB_TOKEN_SIGNING_KEY}
       DATAHUB_TOKEN_SERVICE_SALT: ${DATAHUB_TOKEN_SALT}
-
     volumes:
       - ./configs/datahub/entity-registry.yml:/datahub/datahub-mae-consumer/resources/entity-registry.yml:ro
     healthcheck:
@@ -549,6 +552,59 @@ services:
     networks:
       - lakehouse
     mem_limit: 2g
+
+
+  superset:
+    build:
+      context: .
+      dockerfile: dockerfile.superset
+    container_name: superset
+    depends_on:
+      - trino
+    ports:
+      - "8088:8088"
+    environment:
+      SUPERSET_SECRET_KEY: "superset_secret_key"
+      SUPERSET_CONFIG_PATH: /app/pythonpath/superset_config.py
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin
+      ADMIN_FIRSTNAME: Admin
+      ADMIN_LASTNAME: User
+      ADMIN_EMAIL: admin@example.com
+    volumes:
+      - ./configs/superset:/app/superset_home
+      - ./configs/superset/superset_config.py:/app/pythonpath/superset_config.py
+    command: >
+      /bin/sh -c "
+        superset db upgrade &&
+        superset init &&
+        superset run -h 0.0.0.0 -p 8088 --with-threads
+      "
+    networks:
+      - lakehouse
+    mem_limit: 1g
+
+  dash-app:
+    build:
+      context: /mnt/c/proyectos/datalake/Dash/finance_app
+      dockerfile: Dockerfile
+    container_name: dash-app
+    ports:
+      - "8050:8050"
+    volumes:
+      - /mnt/c/proyectos/datalake/Dash/finance_app:/app
+    environment:
+      DASH_HOST: 0.0.0.0
+      DASH_PORT: 8050
+      DASH_DEBUG: "true"
+      TRINO_HOST: trino
+      TRINO_PORT: 8080
+      TRINO_CATALOG: iceberg
+      TRINO_SCHEMA: gold
+      TRINO_USER: dash
+    networks:
+      - lakehouse
+    restart: unless-stopped
 
 
   vault:
@@ -618,6 +674,164 @@ services:
     mem_limit: 1g
     restart: unless-stopped
 
+  dagster-postgres:
+    image: postgres:16
+    container_name: dagster-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: dagster
+      POSTGRES_PASSWORD: dagster
+      POSTGRES_DB: dagster
+    volumes:
+      - ~/lakehouse-state/dagster-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dagster -d dagster"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - lakehouse
+
+  dagster-user-code:
+    build:
+      context: ./configs/dagster
+      dockerfile: dockerfile.dagster.usercode
+    image: lakehouse-dagster-user-code:latest
+    container_name: dagster-user-code
+    restart: unless-stopped
+    environment:
+      DAGSTER_CURRENT_IMAGE: lakehouse-dagster-user-code:latest
+      DAGSTER_HOME: /opt/dagster/dagster_home
+      DAGSTER_LOCAL_ARTIFACT_STORAGE_DIR: /opt/dagster/dagster_home/storage
+      LOCAL_COMPUTE_LOG_MANAGER_DIRECTORY: /opt/dagster/dagster_home/storage/compute_logs
+      DATAHUB_TOKEN: "${DATAHUB_PAT}"
+      DAGSTER_POSTGRES_USER: dagster
+      DAGSTER_POSTGRES_PASSWORD: dagster
+      DAGSTER_POSTGRES_DB: dagster
+      DAGSTER_POSTGRES_HOST: dagster-postgres
+      DAGSTER_POSTGRES_PORT: "5432"     
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-minio}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-minio123}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
+      TRINO_HOST: ${TRINO_HOST:-trino}
+      TRINO_PORT: ${TRINO_PORT:-8080}
+      NESSIE_URI: ${NESSIE_URI:-http://nessie:19120/api/v1}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      VAULT_ADDR: ${VAULT_ADDR:-http://vault:8200}
+      VAULT_TOKEN: ${VAULT_TOKEN:-hvs.oCMbW7NtERUr60NGUt0VEU7R}
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
+      SPARK_DRIVER_HOST: dagster-user-code
+
+      SPARK_MASTER_URL: ${SPARK_MASTER_URL:-spark://spark-master:7077}
+      PYTHONPATH: /opt/dagster/app/notebooks/BBVA:/opt/bitnami/spark/python:/opt/bitnami/spark/python/lib/py4j-0.10.9.7-src.zip
+      SPARK_EXTRA_CLASSPATH: /opt/bitnami/spark/jars-extra/*
+      PYSPARK_PYTHON: /opt/bitnami/python/bin/python3
+      PYSPARK_DRIVER_PYTHON: /opt/bitnami/python/bin/python3
+
+    volumes:
+       - ~/lakehouse-state/dagster-storage:/opt/dagster/dagster_home/storage
+       - ./configs/dagster/app:/opt/dagster/app
+       - ./configs/notebooks:/opt/dagster/app/notebooks
+       
+    expose:
+      - "4000"
+    depends_on:
+      dagster-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/opt/bitnami/python/bin/dagster", "api", "grpc-health-check", "-p", "4000"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks:
+      - lakehouse
+
+  dagster-webserver:
+    build:
+      context: ./configs/dagster
+      dockerfile: dockerfile.dagster
+    image: lakehouse-dagster-control:latest
+    container_name: dagster-webserver
+    restart: unless-stopped
+    entrypoint:
+      - dagster-webserver
+      - -h
+      - 0.0.0.0
+      - -p
+      - "3000"
+      - -w
+      - /opt/dagster/dagster_home/workspace.yaml
+    environment:
+      DAGSTER_HOME: /opt/dagster/dagster_home
+      DAGSTER_POSTGRES_USER: dagster
+      DAGSTER_POSTGRES_PASSWORD: dagster
+      DAGSTER_POSTGRES_DB: dagster
+      DAGSTER_POSTGRES_HOST: dagster-postgres
+      DAGSTER_POSTGRES_PORT: "5432"
+      DAGSTER_LOCAL_ARTIFACT_STORAGE_DIR: /opt/dagster/dagster_home/storage
+      LOCAL_COMPUTE_LOG_MANAGER_DIRECTORY: /opt/dagster/dagster_home/storage/compute_logs
+    volumes:
+      - ./configs/dagster/dagster.yaml:/opt/dagster/dagster_home/dagster.yaml
+      - ./configs/dagster/workspace.yaml:/opt/dagster/dagster_home/workspace.yaml
+      - ~/lakehouse-state/dagster-storage:/opt/dagster/dagster_home/storage
+    ports:
+      - "3030:3000"
+    depends_on:
+      dagster-postgres:
+        condition: service_healthy
+      dagster-user-code:
+        condition: service_healthy
+    networks:
+      - lakehouse
+
+  dagster-daemon:
+    build:
+      context: ./configs/dagster
+      dockerfile: dockerfile.dagster
+    image: lakehouse-dagster-control:latest
+    container_name: dagster-daemon
+    restart: unless-stopped
+    entrypoint:
+      - dagster-daemon
+      - run
+    environment:
+      DAGSTER_HOME: /opt/dagster/dagster_home
+      DAGSTER_POSTGRES_USER: dagster
+      DAGSTER_POSTGRES_PASSWORD: dagster
+      DAGSTER_POSTGRES_DB: dagster
+      DAGSTER_POSTGRES_HOST: dagster-postgres
+      DAGSTER_POSTGRES_PORT: "5432"
+      DAGSTER_LOCAL_ARTIFACT_STORAGE_DIR: /opt/dagster/dagster_home/storage
+      LOCAL_COMPUTE_LOG_MANAGER_DIRECTORY: /opt/dagster/dagster_home/storage/compute_logs
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL}
+      NESSIE_URI: ${NESSIE_URI}
+      TRINO_HOST: ${TRINO_HOST}
+      TRINO_PORT: ${TRINO_PORT}
+      SPARK_MASTER_URL: ${SPARK_MASTER_URL}
+      PYTHONPATH: /opt/bitnami/spark/python:/opt/bitnami/spark/python/lib/py4j-0.10.9.7-src.zip
+      SPARK_EXTRA_CLASSPATH: /opt/bitnami/spark/jars-extra/*
+      PYSPARK_PYTHON: /opt/bitnami/python/bin/python3
+      PYSPARK_DRIVER_PYTHON: /opt/bitnami/python/bin/python3
+    volumes:
+      - ./configs/dagster/dagster.yaml:/opt/dagster/dagster_home/dagster.yaml
+      - ./configs/dagster/workspace.yaml:/opt/dagster/dagster_home/workspace.yaml
+      - ~/lakehouse-state/dagster-storage:/opt/dagster/dagster_home/storage
+    depends_on:
+      dagster-postgres:
+        condition: service_healthy
+      dagster-user-code:
+        condition: service_healthy
+    networks:
+      - lakehouse
+
+
 networks:
   lakehouse:
     name: lakehouse
+
+

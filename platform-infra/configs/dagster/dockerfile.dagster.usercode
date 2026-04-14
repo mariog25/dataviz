@@ -1,0 +1,65 @@
+FROM public.ecr.aws/bitnami/spark:3.5.3
+
+USER root
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Paquetes del sistema
+RUN install_packages curl poppler-utils build-essential gcc tini
+
+# Dependencias Python:
+# - mantenemos el stack de Jupyter
+# - añadimos Dagster + dagstermill + utilidades de acceso
+RUN /opt/bitnami/python/bin/pip install --no-cache-dir \
+    jupyterlab notebook \
+    boto3 pandas pyarrow \
+    pdfplumber pikepdf \
+    pdf2image pytesseract pillow \
+    qdrant-client \
+    trino \
+    papermill \
+    dagster \
+    dagster-postgres \
+    dagster-docker \
+    dagstermill \
+    acryl_datahub_dagster_plugin
+
+# JARs extra para Spark/Iceberg/S3
+RUN mkdir -p /opt/bitnami/spark/jars-extra && \
+    curl -fL -o /opt/bitnami/spark/jars-extra/iceberg-spark-runtime-3.5_2.12-1.6.1.jar \
+      https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-spark-runtime-3.5_2.12/1.6.1/iceberg-spark-runtime-3.5_2.12-1.6.1.jar && \
+    curl -fL -o /opt/bitnami/spark/jars-extra/hadoop-aws-3.3.4.jar \
+      https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar && \
+    curl -fL -o /opt/bitnami/spark/jars-extra/aws-java-sdk-bundle-1.12.262.jar \
+      https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar
+
+# Directorios de trabajo
+RUN mkdir -p /opt/dagster/app /opt/dagster/home /notebooks /root/.jupyter
+
+# Si ya lo usas para preparar config de Jupyter/Spark, mantenlo
+COPY dagster-user-setup.py /tmp/jupyter-setup.py
+RUN /opt/bitnami/python/bin/python3 /tmp/jupyter-setup.py || true
+
+RUN /opt/bitnami/python/bin/pip install --no-cache-dir \
+    nbformat \
+    nbconvert
+
+# Variables Spark/Python alineadas con tu Jupyter
+ENV PYTHONPATH=/opt/bitnami/spark/python:/opt/bitnami/spark/python/lib/py4j-0.10.9.7-src.zip
+ENV SPARK_EXTRA_CLASSPATH=/opt/bitnami/spark/jars-extra/*
+ENV PYSPARK_PYTHON=/opt/bitnami/python/bin/python3
+ENV PYSPARK_DRIVER_PYTHON=/opt/bitnami/python/bin/python3
+
+# Directorio de código de Dagster
+WORKDIR /opt/dagster/app
+COPY app /opt/dagster/app
+COPY app/notebooks /opt/dagster/app/notebooks
+
+# gRPC code server de Dagster
+EXPOSE 4000
+
+HEALTHCHECK --timeout=5s --start-period=10s --interval=10s --retries=12 \
+  CMD ["/opt/bitnami/python/bin/dagster", "api", "grpc-health-check", "-p", "4000"]
+
+CMD ["/opt/bitnami/python/bin/dagster", "code-server", "start", "-h", "0.0.0.0", "-p", "4000", "-f", "definitions.py"]

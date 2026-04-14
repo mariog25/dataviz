@@ -26,6 +26,9 @@ RUN pip install --no-cache-dir \
     boto3 \
     pyspark \
     requests \
+    pdfplumber \
+    pytesseract \
+    pikepdf \
     pandas \
     botocore \
     pyarrow \

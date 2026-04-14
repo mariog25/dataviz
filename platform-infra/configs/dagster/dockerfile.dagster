@@ -1,0 +1,32 @@
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV DAGSTER_HOME=/opt/dagster/dagster_home
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir \
+    dagster \
+    dagster-graphql \
+    "dagster-webserver[notebook]" \
+    dagster-webserver \
+    dagster-postgres \
+    dagster-docker \
+    dagstermill \
+    nbformat \
+    nbconvert \
+    papermill
+
+
+
+RUN mkdir -p ${DAGSTER_HOME}
+
+WORKDIR ${DAGSTER_HOME}
+
+# Estos ficheros se montarán también por volumen, pero copiarlos ayuda
+# si luego quieres probar la imagen de forma independiente.
+COPY dagster.yaml workspace.yaml ${DAGSTER_HOME}/

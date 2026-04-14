@@ -90,3 +90,30 @@ platform-infra/configs/jupyter/notebooks/bbva_pdf_pipeline.py
 platform-infra/configs/airflow/dags/__pycache__/bbva_pdf_pipeline.cpython-311.pyc
 platform-infra/dockerfile.jupyterlab
 platform-infra/dockerfile.jupyterlab
+platform-infra/configs/notebooks/BBVA/movimientos_bbva/__pycache__/*.*
+platform-infra/configs/superset/.bash_history
+platform-infra/configs/superset/superset.db
+platform-infra/configs/notebooks/BBVA/movimientos_bbva/.ipynb_checkpoints/*.*
+platform-infra/**/__pycache__/*.*
+platform-infra/**/.ipynb_checkpoints/*.*
+platform-infra/**/.Trash-0/*.*
+platform-infra/configs/jupyter/notebooks/hello_etl2.ipynb
+platform-infra/configs/jupyter/notebooks/.Trash-0/info/hello_etl 2.ipynb.trashinfo
+platform-infra/configs/jupyter/notebooks/.Trash-0/info/hello_etl.ipynb.trashinfo
+platform-infra/configs/jupyter/notebooks/.Trash-0/info/process_hipoteca_original.ipynb.trashinfo
+platform-infra/configs/jupyter/notebooks/.Trash-0/info/recibos_hipoteca_fin.csv.trashinfo
+platform-infra/configs/jupyter/notebooks/.Trash-0/info/recibos_hipoteca.csv.trashinfo
+platform-infra/configs/jupyter/notebooks/.Trash-0/info/test.ipynb.trashinfo
+platform-infra/configs/jupyter/notebooks/.Trash-0/info/Untitled 1.ipynb.trashinfo
+platform-infra/configs/jupyter/notebooks/.Trash-0/info/Untitled.ipynb.trashinfo
+platform-infra/configs/jupyter/notebooks/.Trash-0/info/Untitled1.ipynb.trashinfo
+platform-infra/configs/airflow/dags/__pycache__/bbva_pdf_pipeline.cpython-311.pyc
+platform-infra/.env
+platform-infra/.env
+platform-infra/configs/notebooks/.Trash-0/files/process-movements.ipynb
+platform-infra/configs/notebooks/.Trash-0/info/bbva_pdf_pipeline.py.trashinfo
+platform-infra/configs/notebooks/.Trash-0/info/process-movements.ipynb.trashinfo
+platform-infra/configs/jupyter/notebooks/.Trash-0/info/Gmail-BBVA.ipynb.trashinfo
+platform-infra/configs/jupyter/notebooks/.Trash-0/files/Untitled 1.ipynb
+platform-infra/configs/jupyter/notebooks/.Trash-0/files/Untitled.ipynb
+platform-infra/configs/jupyter/notebooks/.Trash-0/files/Untitled1.ipynb
