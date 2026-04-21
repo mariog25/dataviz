@@ -170,6 +170,8 @@ services:
       ICEBERG_WAREHOUSE: ${ICEBERG_WAREHOUSE}
       PYTHONPATH: /notebooks/BBVA:/opt/bitnami/spark/python:/opt/bitnami/spark/python/lib/py4j-0.10.9.7-src.zip
       SPARK_DRIVER_HOST: jupyterlab
+      DATAHUB_SECRET: ${DATAHUB_SECRET}
+      VAULT_TOKEN: ${VAULT_TOKEN}
     volumes:
       - ./configs/notebooks:/notebooks
       - ../data-workloads:/home/jovyan/work/data-workloads
@@ -410,6 +412,7 @@ services:
       ENTITY_REGISTRY_CONFIG_PATH: /datahub/datahub-gms/resources/entity-registry.yml
       GRAPH_SERVICE_IMPL: elasticsearch
       DATAHUB_SECRET: ${DATAHUB_SECRET}
+      VAULT_TOKEN: ${VAULT_TOKEN}
       DATAHUB_PRECREATE_TOPICS: "true"
       DATAHUB_SQL_SETUP_ENABLED: "true"
     networks:
